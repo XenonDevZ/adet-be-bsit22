@@ -1,21 +1,24 @@
 {
-  "name": "adet-be-bsit22",
-  "type": "module",
+  "name": "acbs-backend",
+  "version": "1.0.0",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "nodemon --watch src --ext ts --exec tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.11",
-    "hono": "^4.12.5"
+    "@hono/node-server": "^1.13.7",
+    "dotenv": "^16.4.5",
+    "hono": "^4.6.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.3",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/node": "^20.11.17",
-    "dotenv": "^17.3.1",
-    "mysql2": "^3.19.0",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.7.1",
-    "typescript": "^5.9.3"
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.0.0",
+    "nodemon": "^3.1.7",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
   }
 }

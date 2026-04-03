@@ -1,16 +1,24 @@
-import mysql from 'mysql2/promise';
+import mysql from 'mysql2/promise'
+import { env } from './env.js'
 
-const dbConfig = {
-    host: 'localhost',
-    port: 3306, // Put the database port here
-    user: 'root',
-    password: 'admin123',
-    database: 'bsit-22', // Put here your database
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-};
+export const db = mysql.createPool({
+  host:               env.DB_HOST,
+  port:               Number(env.DB_PORT),
+  database:           env.DB_NAME,
+  user:               env.DB_USER,
+  password:           env.DB_PASSWORD,
+  waitForConnections: true,
+  connectionLimit:    10,
+  queueLimit:         0,
+})
 
-const pool = mysql.createPool(dbConfig);
-
-export default pool;
+// Test connection on startup
+db.getConnection()
+  .then(conn => {
+    console.log('✅  MySQL connected')
+    conn.release()
+  })
+  .catch(err => {
+    console.error('❌  MySQL connection failed:', err.message)
+    process.exit(1)
+  })

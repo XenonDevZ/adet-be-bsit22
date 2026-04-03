@@ -1,0 +1,51 @@
+import { db } from '../config/db.js'
+import type { Role, User } from '../types/index.js'
+
+export const findByEmail = async (email: string): Promise<User | null> => {
+  const [rows] = await db.query<any[]>(
+    'SELECT * FROM users WHERE email = ? LIMIT 1',
+    [email]
+  )
+  return rows[0] ?? null
+}
+
+export const findById = async (id: number): Promise<User | null> => {
+  const [rows] = await db.query<any[]>(
+    'SELECT * FROM users WHERE id = ? LIMIT 1',
+    [id]
+  )
+  return rows[0] ?? null
+}
+
+export const create = async (data: {
+  google_id: string
+  email: string
+  name: string
+  picture: string
+  role: Role
+}): Promise<User> => {
+  const [result] = await db.query<any>(
+    `INSERT INTO users (google_id, email, name, picture, role)
+     VALUES (?, ?, ?, ?, ?)`,
+    [data.google_id, data.email, data.name, data.picture, data.role]
+  )
+
+  const user = await findById(result.insertId)
+  if (!user) throw new Error('Failed to create user')
+  return user
+}
+
+export const findAll = async (): Promise<User[]> => {
+  const [rows] = await db.query<any[]>(
+    'SELECT id, email, name, picture, role, created_at FROM users ORDER BY created_at DESC'
+  )
+  return rows
+}
+
+export const updateRole = async (id: number, role: Role): Promise<void> => {
+  const [result] = await db.query<any>(
+    'UPDATE users SET role = ? WHERE id = ?',
+    [role, id]
+  )
+  if (result.affectedRows === 0) throw new Error('User not found')
+}
