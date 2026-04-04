@@ -2,7 +2,7 @@ import type { Context } from 'hono'
 import * as usersService from '../services/users.service.js'
 import * as teachersService from '../services/teachers.service.js'
 import { ok, err } from '../utils/response.js'
-import type { Role } from '../types/index.js'
+import { UpdateRoleSchema } from '../validators/index.js'
 
 // GET /users  (admin only)
 export const listUsers = async (c: Context) => {
@@ -13,12 +13,17 @@ export const listUsers = async (c: Context) => {
 // PATCH /users/:id/role  (admin only)
 export const changeRole = async (c: Context) => {
   const id   = Number(c.req.param('id'))
-  const { role } = await c.req.json() as { role: Role }
+  if (isNaN(id)) return c.json(err('Invalid user id'), 400)
 
-  const validRoles: Role[] = ['STUDENT', 'TEACHER', 'ADMIN']
-  if (!validRoles.includes(role)) {
-    return c.json(err(`role must be one of: ${validRoles.join(', ')}`), 400)
+  const body = await c.req.json()
+
+  // Validate input
+  const parsed = UpdateRoleSchema.safeParse(body)
+  if (!parsed.success) {
+    return c.json(err(parsed.error.errors[0].message), 400)
   }
+
+  const { role } = parsed.data
 
   // Prevent self-demotion
   const caller = c.get('user')
@@ -26,13 +31,18 @@ export const changeRole = async (c: Context) => {
     return c.json(err('Admins cannot demote themselves'), 400)
   }
 
-  await usersService.updateRole(id, role)
+  try {
+    await usersService.updateRole(id, role)
 
-  // If promoted to TEACHER, auto-create teacher profile
-  if (role === 'TEACHER') {
-    await teachersService.createProfile(id)
+    // Auto-create teacher profile on promotion
+    if (role === 'TEACHER') {
+      await teachersService.createProfile(id)
+    }
+
+    const updated = await usersService.findById(id)
+    return c.json(ok(updated))
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to update role'
+    return c.json(err(message), 400)
   }
-
-  const updated = await usersService.findById(id)
-  return c.json(ok(updated))
 }

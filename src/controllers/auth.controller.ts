@@ -3,20 +3,25 @@ import * as authService from '../services/auth.service.js'
 import * as usersService from '../services/users.service.js'
 import { signJwt } from '../utils/jwt.js'
 import { ok, err } from '../utils/response.js'
+import { GoogleAuthSchema } from '../validators/index.js'
 
 // POST /auth/google
 export const googleAuth = async (c: Context) => {
   try {
-    const { idToken } = await c.req.json()
+    const body = await c.req.json()
 
-    if (!idToken) {
-      return c.json(err('idToken is required'), 400)
+    // Validate input
+    const parsed = GoogleAuthSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json(err(parsed.error.errors[0].message), 400)
     }
 
-    // 1. Verify with Google
+    const { idToken } = parsed.data
+
+    // Verify with Google
     const gUser = await authService.verifyGoogleToken(idToken)
 
-    // 2. Domain restriction — @liceo.edu.ph only
+    // Domain restriction
     if (!gUser.email.endsWith('@liceo.edu.ph')) {
       return c.json(
         err('Access restricted to @liceo.edu.ph accounts', 'DOMAIN_RESTRICTED'),
@@ -24,7 +29,7 @@ export const googleAuth = async (c: Context) => {
       )
     }
 
-    // 3. Find or create user
+    // Find or create user
     let user = await usersService.findByEmail(gUser.email)
 
     if (!user) {
@@ -37,7 +42,7 @@ export const googleAuth = async (c: Context) => {
       })
     }
 
-    // 4. Sign JWT
+    // Sign JWT
     const token = signJwt({
       sub:     user.id,
       email:   user.email,
@@ -56,9 +61,10 @@ export const googleAuth = async (c: Context) => {
         role:    user.role,
       }
     }))
-  } catch (e: any) {
-    console.error('[googleAuth]', e.message)
-    return c.json(err(e.message || 'Authentication failed'), 401)
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Authentication failed'
+    console.error('[googleAuth]', message)
+    return c.json(err(message), 401)
   }
 }
 
