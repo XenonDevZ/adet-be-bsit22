@@ -8,6 +8,7 @@ import {
   CreateBookingSchema,
   UpdateBookingStatusSchema,
   AddNotesSchema,
+  RescheduleBookingSchema,
 } from '../validators/index.js'
 
 // POST /bookings  (student)
@@ -16,14 +17,15 @@ export const createBooking = async (c: Context) => {
     const jwtUser = c.get('user')
     const body    = await c.req.json()
 
-    // Validate input
     const parsed = CreateBookingSchema.safeParse(body)
     if (!parsed.success) {
       return c.json(err(parsed.error.errors[0].message), 400)
     }
 
-    const { teacher_id, availability_id, scheduled_date, start_time, end_time, notes } =
-      parsed.data
+    const {
+      teacher_id, availability_id, scheduled_date,
+      start_time, end_time, consultation_type, notes
+    } = parsed.data
 
     // Date must not be in the past
     if (new Date(scheduled_date) < new Date(new Date().toDateString())) {
@@ -41,13 +43,14 @@ export const createBooking = async (c: Context) => {
     }
 
     const booking = await bookingsService.create({
-      student_id: jwtUser.sub,
+      student_id:        jwtUser.sub,
       teacher_id,
       availability_id,
       scheduled_date,
       start_time,
       end_time,
-      student_notes: notes,
+      consultation_type,
+      student_notes:     notes,
     })
 
     return c.json(ok(booking), 201)
@@ -135,10 +138,61 @@ export const addNotes = async (c: Context) => {
   }
 }
 
+// PATCH /bookings/:id/reschedule  (student)
+export const requestReschedule = async (c: Context) => {
+  try {
+    const jwtUser = c.get('user')
+    const id      = Number(c.req.param('id'))
+    if (isNaN(id)) return c.json(err('Invalid booking id'), 400)
+
+    const body   = await c.req.json()
+    const parsed = RescheduleBookingSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json(err(parsed.error.errors[0].message), 400)
+    }
+
+    const updated = await bookingsService.requestReschedule(id, jwtUser.sub, parsed.data)
+    return c.json(ok(updated))
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to request reschedule'
+    return c.json(err(message), 400)
+  }
+}
+
+// PATCH /bookings/:id/reschedule-response  (teacher)
+export const respondReschedule = async (c: Context) => {
+  try {
+    const jwtUser = c.get('user')
+    const id      = Number(c.req.param('id'))
+    if (isNaN(id)) return c.json(err('Invalid booking id'), 400)
+
+    const { accept } = await c.req.json() as { accept: boolean }
+    if (typeof accept !== 'boolean') {
+      return c.json(err('accept must be true or false'), 400)
+    }
+
+    const teacherProfile = await teachersService.findByUserId(jwtUser.sub)
+    if (!teacherProfile) return c.json(err('Teacher profile not found'), 403)
+
+    const updated = await bookingsService.respondReschedule(id, teacherProfile.id, accept)
+    return c.json(ok(updated))
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to respond to reschedule'
+    return c.json(err(message), 400)
+  }
+}
+
 // GET /notifications/unread
 export const getUnreadNotifications = async (c: Context) => {
   const jwtUser = c.get('user')
   const notifs  = await notifService.findUnread(jwtUser.sub)
+  return c.json(ok(notifs, { total: notifs.length }))
+}
+
+// GET /notifications/all
+export const getAllNotifications = async (c: Context) => {
+  const jwtUser = c.get('user')
+  const notifs  = await notifService.findAll(jwtUser.sub)
   return c.json(ok(notifs, { total: notifs.length }))
 }
 
@@ -147,4 +201,13 @@ export const markNotificationsRead = async (c: Context) => {
   const jwtUser = c.get('user')
   await notifService.markAllRead(jwtUser.sub)
   return c.json(ok({ message: 'All notifications marked as read' }))
+}
+
+// PATCH /notifications/:id/read
+export const markNotificationRead = async (c: Context) => {
+  const jwtUser = c.get('user')
+  const id      = Number(c.req.param('id'))
+  if (isNaN(id)) return c.json(err('Invalid notification id'), 400)
+  await notifService.markRead(id, jwtUser.sub)
+  return c.json(ok({ message: 'Marked as read' }))
 }

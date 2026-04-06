@@ -8,6 +8,8 @@ import { teachersRoutes } from './routes/teachers.routes.js'
 import { availabilityRoutes } from './routes/availability.routes.js'
 import { bookingsRoutes } from './routes/bookings.routes.js'
 import { err } from './utils/response.js'
+import { profileRoutes } from './routes/profile.routes.js'
+
 
 export const app = new Hono()
 
@@ -30,6 +32,7 @@ app.route('/users',        usersRoutes)
 app.route('/teachers',     teachersRoutes)
 app.route('/availability', availabilityRoutes)
 app.route('/bookings',     bookingsRoutes)
+app.route('/profile', profileRoutes)
 
 // ── 404 fallback ─────────────────────────────────────────
 app.notFound((c) => c.json(err('Route not found'), 404))

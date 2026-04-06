@@ -4,13 +4,14 @@ import * as notifService from './notification.service.js'
 
 // ── Create (student) ──────────────────────────────────────
 export const create = async (data: {
-  student_id:      number
-  teacher_id:      number
-  availability_id: number
-  scheduled_date:  string
-  start_time:      string
-  end_time:        string
-  student_notes?:  string
+  student_id:        number
+  teacher_id:        number
+  availability_id:   number
+  scheduled_date:    string
+  start_time:        string
+  end_time:          string
+  consultation_type: 'ONLINE' | 'FACE_TO_FACE'
+  student_notes?:    string
 }): Promise<BookingRow> => {
   // Layer 1: teacher conflict check
   const [teacherConflict] = await db.query<BookingRow[]>(`
@@ -41,17 +42,16 @@ export const create = async (data: {
   if (studentConflict.length > 0) {
     throw new Error('You already have a booking at this time')
   }
-
   const [result] = await db.query<ResultSetHeader>(`
     INSERT INTO bookings
       (student_id, teacher_id, availability_id, scheduled_date,
-       start_time, end_time, student_notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+       start_time, end_time, consultation_type, student_notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     data.student_id, data.teacher_id, data.availability_id,
     data.scheduled_date, data.start_time, data.end_time,
-    data.student_notes ?? null,
-  ])
+    data.consultation_type, data.student_notes ?? null,
+  ])  
 
   const booking = await findById(result.insertId)
   if (!booking) throw new Error('Failed to create booking')
@@ -203,6 +203,94 @@ export const addTeacherNotes = async (
     'UPDATE bookings SET teacher_notes = ? WHERE id = ?',
     [notes, id]
   )
+
+  const updated = await findById(id)
+  if (!updated) throw new Error('Failed to fetch updated booking')
+  return updated
+}
+
+// Student requests reschedule
+export const requestReschedule = async (
+  id:        number,
+  studentId: number,
+  data: {
+    reschedule_date:       string
+    reschedule_start_time: string
+    reschedule_end_time:   string
+  }
+): Promise<BookingRow> => {
+  const booking = await findById(id)
+  if (!booking) throw new Error('Booking not found')
+  if (booking.student_id !== studentId) throw new Error('Not your booking')
+  if (booking.status !== 'PENDING' && booking.status !== 'APPROVED') {
+    throw new Error('Can only reschedule pending or approved bookings')
+  }
+
+  // Validate new date is not in the past
+  if (new Date(data.reschedule_date) < new Date(new Date().toDateString())) {
+    throw new Error('Reschedule date cannot be in the past')
+  }
+
+  await db.query<ResultSetHeader>(
+    `UPDATE bookings
+     SET reschedule_date = ?, reschedule_start_time = ?,
+         reschedule_end_time = ?, reschedule_status = 'REQUESTED'
+     WHERE id = ?`,
+    [data.reschedule_date, data.reschedule_start_time, data.reschedule_end_time, id]
+  )
+
+  // Notify teacher
+  await notifService.create(
+    booking.teacher_user_id,
+    id,
+    `${booking.student_name} requested a reschedule for their booking on ${booking.scheduled_date}`
+  )
+
+  const updated = await findById(id)
+  if (!updated) throw new Error('Failed to fetch updated booking')
+  return updated
+}
+
+// Teacher responds to reschedule
+export const respondReschedule = async (
+  id:        number,
+  teacherId: number,
+  accept:    boolean
+): Promise<BookingRow> => {
+  const booking = await findById(id)
+  if (!booking) throw new Error('Booking not found')
+  if (booking.teacher_id !== teacherId) throw new Error('Not your booking')
+  if (booking.reschedule_status !== 'REQUESTED') {
+    throw new Error('No reschedule request found for this booking')
+  }
+
+  if (accept) {
+    // Apply the new schedule and clear reschedule fields
+    await db.query<ResultSetHeader>(
+      `UPDATE bookings
+       SET scheduled_date = reschedule_date,
+           start_time = reschedule_start_time,
+           end_time = reschedule_end_time,
+           reschedule_status = 'ACCEPTED',
+           reschedule_date = NULL,
+           reschedule_start_time = NULL,
+           reschedule_end_time = NULL
+       WHERE id = ?`,
+      [id]
+    )
+  } else {
+    await db.query<ResultSetHeader>(
+      `UPDATE bookings SET reschedule_status = 'REJECTED' WHERE id = ?`,
+      [id]
+    )
+  }
+
+  // Notify student
+  const msg = accept
+    ? `Your reschedule request for ${booking.scheduled_date} was accepted.`
+    : `Your reschedule request for ${booking.scheduled_date} was rejected.`
+
+  await notifService.create(booking.student_user_id, id, msg)
 
   const updated = await findById(id)
   if (!updated) throw new Error('Failed to fetch updated booking')

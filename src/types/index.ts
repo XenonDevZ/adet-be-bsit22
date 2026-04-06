@@ -32,21 +32,26 @@ export interface UserRow extends RowDataPacket {
   email:      string
   name:       string
   picture:    string
+  course:     string | null   // ADD
+  year_level: string | null   // ADD
+  department: string | null   // ADD
   role:       Role
   created_at: Date
   updated_at: Date
 }
 
+
 export interface TeacherRow extends RowDataPacket {
-  id:         number
-  user_id:    number
-  teacher_id: number
-  department: string | null
-  bio:        string | null
-  name:       string
-  email:      string
-  picture:    string
-  created_at: Date
+  id:          number
+  user_id:     number
+  teacher_id:  number
+  department:  string | null
+  bio:         string | null
+  subjects:    string | null   // ADD
+  name:        string
+  email:       string
+  picture:     string
+  created_at:  Date
 }
 
 export interface AvailabilityRow extends RowDataPacket {
@@ -60,24 +65,29 @@ export interface AvailabilityRow extends RowDataPacket {
 }
 
 export interface BookingRow extends RowDataPacket {
-  id:              number
-  student_id:      number
-  teacher_id:      number
-  availability_id: number
-  scheduled_date:  string
-  start_time:      string
-  end_time:        string
-  status:          BookingStatus
-  student_notes:   string | null
-  teacher_notes:   string | null
-  meet_link:       string | null
-  student_name:    string
-  student_email:   string
-  teacher_name:    string
-  teacher_user_id: number
-  student_user_id: number
-  created_at:      Date
-  updated_at:      Date
+  id:                number
+  student_id:        number
+  teacher_id:        number
+  availability_id:   number
+  scheduled_date:    string
+  start_time:        string
+  end_time:          string
+  status:            BookingStatus
+  consultation_type: 'ONLINE' | 'FACE_TO_FACE'   // ADD
+  student_notes:     string | null
+  teacher_notes:     string | null
+  meet_link:         string | null
+  student_name:      string
+  student_email:     string
+  teacher_name:      string
+  teacher_user_id:   number
+  student_user_id:   number
+  created_at:        Date
+  updated_at:        Date
+  reschedule_date:       string | null
+  reschedule_start_time: string | null
+  reschedule_end_time:   string | null
+  reschedule_status:     'REQUESTED' | 'ACCEPTED' | 'REJECTED' | null
 }
 
 export interface NotificationRow extends RowDataPacket {

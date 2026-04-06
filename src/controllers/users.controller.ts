@@ -2,7 +2,8 @@ import type { Context } from 'hono'
 import * as usersService from '../services/users.service.js'
 import * as teachersService from '../services/teachers.service.js'
 import { ok, err } from '../utils/response.js'
-import { UpdateRoleSchema } from '../validators/index.js'
+import { UpdateRoleSchema, UpdateSubjectsSchema } from '../validators/index.js'
+
 
 // GET /users  (admin only)
 export const listUsers = async (c: Context) => {
@@ -43,6 +44,26 @@ export const changeRole = async (c: Context) => {
     return c.json(ok(updated))
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Failed to update role'
+    return c.json(err(message), 400)
+  }
+}
+
+// PATCH /users/:id/subjects  (admin only)
+export const updateSubjects = async (c: Context) => {
+  try {
+    const id   = Number(c.req.param('id'))
+    if (isNaN(id)) return c.json(err('Invalid user id'), 400)
+
+    const body   = await c.req.json()
+    const parsed = UpdateSubjectsSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json(err(parsed.error.errors[0].message), 400)
+    }
+
+    await teachersService.updateSubjects(id, parsed.data.subjects)
+    return c.json(ok({ message: 'Subjects updated successfully' }))
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to update subjects'
     return c.json(err(message), 400)
   }
 }

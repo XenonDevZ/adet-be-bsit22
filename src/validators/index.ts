@@ -49,8 +49,12 @@ export const CreateBookingSchema = z.object({
   end_time: z
     .string()
     .regex(/^\d{2}:\d{2}(:\d{2})?$/, 'end_time must be HH:MM or HH:MM:SS'),
+  consultation_type: z.enum(['ONLINE', 'FACE_TO_FACE'], {
+    errorMap: () => ({ message: 'consultation_type must be ONLINE or FACE_TO_FACE' }),
+  }),
   notes: z.string().max(1000, 'Notes cannot exceed 1000 characters').optional(),
 })
+
 
 export const UpdateBookingStatusSchema = z.object({
   status: z.enum(['APPROVED', 'COMPLETED', 'CANCELLED'], {
@@ -65,6 +69,30 @@ export const AddNotesSchema = z.object({
     .max(2000, 'Notes cannot exceed 2000 characters'),
 })
 
+export const RescheduleBookingSchema = z.object({
+  reschedule_date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  reschedule_start_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Invalid start time'),
+  reschedule_end_time:   z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Invalid end time'),
+})
+
+
+export const UpdateProfileSchema = z.object({
+  name:       z.string().min(1, 'Name is required').max(255),
+  course:     z.string().min(1, 'Course is required').max(255),
+  year_level: z.string().min(1, 'Year level is required').max(50),
+  department: z.string().min(1, 'Department is required').max(255),
+})
+
+export const UpdateSubjectsSchema = z.object({
+  subjects: z.string().max(500, 'Subjects too long'),
+})
+
+export const UpdateConsultationTypeSchema = z.object({
+  consultation_type: z.enum(['ONLINE', 'FACE_TO_FACE'], {
+    errorMap: () => ({ message: 'consultation_type must be ONLINE or FACE_TO_FACE' }),
+  }),
+})
+
 // ── Inferred TS types from schemas (use in controllers) ───
 export type GoogleAuthInput        = z.infer<typeof GoogleAuthSchema>
 export type UpdateRoleInput        = z.infer<typeof UpdateRoleSchema>
@@ -72,3 +100,6 @@ export type CreateAvailabilityInput = z.infer<typeof CreateAvailabilitySchema>
 export type CreateBookingInput     = z.infer<typeof CreateBookingSchema>
 export type UpdateBookingStatusInput = z.infer<typeof UpdateBookingStatusSchema>
 export type AddNotesInput          = z.infer<typeof AddNotesSchema>
+export type UpdateProfileInput     = z.infer<typeof UpdateProfileSchema>
+export type UpdateSubjectsInput = z.infer<typeof UpdateSubjectsSchema>
+export type RescheduleBookingInput = z.infer<typeof RescheduleBookingSchema>

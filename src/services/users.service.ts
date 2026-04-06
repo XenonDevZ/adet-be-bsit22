@@ -48,3 +48,23 @@ export const updateRole = async (id: number, role: Role): Promise<void> => {
   )
   if (result.affectedRows === 0) throw new Error('User not found')
 }
+
+export const updateProfile = async (
+  id: number,
+  data: {
+    name:       string
+    course:     string
+    year_level: string
+    department: string
+  }
+): Promise<UserRow> => {
+  const [result] = await db.query<ResultSetHeader>(
+    `UPDATE users SET name = ?, course = ?, year_level = ?, department = ?
+     WHERE id = ?`,
+    [data.name, data.course, data.year_level, data.department, id]
+  )
+  if (result.affectedRows === 0) throw new Error('User not found')
+  const updated = await findById(id)
+  if (!updated) throw new Error('Failed to fetch updated user')
+  return updated
+}

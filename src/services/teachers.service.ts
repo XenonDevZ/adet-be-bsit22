@@ -65,3 +65,11 @@ export const createProfile = async (
   if (!rows[0]) throw new Error('Failed to create teacher profile')
   return rows[0]
 }
+
+export const updateSubjects = async (userId: number, subjects: string): Promise<void> => {
+  const [result] = await db.query<ResultSetHeader>(
+    'UPDATE teachers SET subjects = ? WHERE user_id = ?',
+    [subjects, userId]
+  )
+  if (result.affectedRows === 0) throw new Error('Teacher not found')
+}
