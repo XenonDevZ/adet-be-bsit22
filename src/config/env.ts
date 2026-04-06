@@ -10,7 +10,7 @@ const envSchema = z.object({
   DB_PASSWORD:      z.string(),
   GOOGLE_CLIENT_ID: z.string(),
   JWT_SECRET:       z.string().min(32),
-  FRONTEND_URL:     z.string().default('http://localhost:4200'),
+  FRONTEND_URL:     z.string().default('https://ldcu-consultations.vercel.app'),
 })
 
 const parsed = envSchema.safeParse(process.env)
