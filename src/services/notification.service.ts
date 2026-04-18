@@ -1,6 +1,11 @@
 import { db } from '../config/db.js'
 import type { NotificationRow, ResultSetHeader } from '../types/index.js'
 
+const fmtDate = (d: Date | string): string => {
+  const date = typeof d === 'string' ? new Date(d + 'T00:00:00') : new Date(d)
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export const create = async (
   userId:    number,
   bookingId: number | null,
@@ -11,6 +16,19 @@ export const create = async (
     [userId, bookingId, message]
   )
 }
+
+export const notifyAdmins = async (
+  bookingId: number | null,
+  message: string
+): Promise<void> => {
+  const [admins] = await db.query<{ id: number }[]>(
+    'SELECT id FROM users WHERE role = "ADMIN"'
+  )
+  for (const admin of admins) {
+    await create(admin.id, bookingId, message)
+  }
+}
+
 
 export const findUnread = async (userId: number): Promise<NotificationRow[]> => {
   const [rows] = await db.query<NotificationRow[]>(
@@ -80,14 +98,14 @@ export const sendUpcomingReminders = async (): Promise<void> => {
     await create(
       booking.student_id,
       booking.id,
-      `⏰ Reminder: Your ${type} consultation with ${booking.teacher_name} starts at ${timeStr} today.`
+      `⏰ Reminder: Your ${type} consultation with ${booking.teacher_name} starts at ${timeStr} today (${fmtDate(booking.scheduled_date)}).`
     )
 
     // Notify teacher
     await create(
       booking.teacher_user_id,
       booking.id,
-      `⏰ Reminder: Your ${type} consultation with ${booking.student_name} starts at ${timeStr} today.`
+      `⏰ Reminder: Your ${type} consultation with ${booking.student_name} starts at ${timeStr} today (${fmtDate(booking.scheduled_date)}).`
     )
   }
 

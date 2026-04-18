@@ -83,15 +83,25 @@ export const UpdateProfileSchema = z.object({
   department: z.string().min(1, 'Department is required').max(255),
 })
 
-export const UpdateSubjectsSchema = z.object({
-  subjects: z.string().max(500, 'Subjects too long'),
+export const UpdateTeacherProfileSchema = z.object({
+  name:       z.string().min(1, 'Name is required').max(255),
+  department: z.string().min(1, 'Department is required').max(255),
+  bio:        z.string().max(1000, 'Bio too long').optional().nullable(),
 })
+
+
 
 export const UpdateConsultationTypeSchema = z.object({
   consultation_type: z.enum(['ONLINE', 'FACE_TO_FACE'], {
     errorMap: () => ({ message: 'consultation_type must be ONLINE or FACE_TO_FACE' }),
   }),
 })
+
+export const FeedbackSchema = z.object({
+  rating:  z.number().int().min(1).max(5, 'Rating must be between 1 and 5'),
+  comment: z.string().max(1000).optional(),
+})
+
 
 // ── Inferred TS types from schemas (use in controllers) ───
 export type GoogleAuthInput        = z.infer<typeof GoogleAuthSchema>
@@ -101,5 +111,6 @@ export type CreateBookingInput     = z.infer<typeof CreateBookingSchema>
 export type UpdateBookingStatusInput = z.infer<typeof UpdateBookingStatusSchema>
 export type AddNotesInput          = z.infer<typeof AddNotesSchema>
 export type UpdateProfileInput     = z.infer<typeof UpdateProfileSchema>
-export type UpdateSubjectsInput = z.infer<typeof UpdateSubjectsSchema>
+export type UpdateTeacherProfileInput = z.infer<typeof UpdateTeacherProfileSchema>
 export type RescheduleBookingInput = z.infer<typeof RescheduleBookingSchema>
+export type FeedbackInput = z.infer<typeof FeedbackSchema>

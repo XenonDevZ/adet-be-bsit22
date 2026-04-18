@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { listUsers, changeRole, updateSubjects } from '../controllers/users.controller.js'
+import { listUsers, changeRole } from '../controllers/users.controller.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { requireRole } from '../middleware/roleGuard.js'
 
@@ -10,5 +10,3 @@ usersRoutes.use('*', requireRole('ADMIN'))
 
 usersRoutes.get('/',         listUsers)
 usersRoutes.patch('/:id/role', changeRole)
-
-usersRoutes.patch('/:id/subjects', updateSubjects)

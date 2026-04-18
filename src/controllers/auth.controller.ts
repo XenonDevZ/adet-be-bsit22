@@ -40,6 +40,9 @@ export const googleAuth = async (c: Context) => {
         picture:   gUser.picture,
         role:      'STUDENT',
       })
+    } else if (user.picture !== gUser.picture) {
+      await usersService.updatePicture(user.id, gUser.picture)
+      user.picture = gUser.picture
     }
 
     // Sign JWT

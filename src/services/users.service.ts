@@ -49,6 +49,22 @@ export const updateRole = async (id: number, role: Role): Promise<void> => {
   if (result.affectedRows === 0) throw new Error('User not found')
 }
 
+export const updateName = async (id: number, name: string): Promise<void> => {
+  const [result] = await db.query<ResultSetHeader>(
+    'UPDATE users SET name = ? WHERE id = ?',
+    [name, id]
+  )
+  if (result.affectedRows === 0) throw new Error('User not found')
+}
+
+export const updatePicture = async (id: number, picture: string): Promise<void> => {
+  const [result] = await db.query<ResultSetHeader>(
+    'UPDATE users SET picture = ? WHERE id = ?',
+    [picture, id]
+  )
+  if (result.affectedRows === 0) throw new Error('User not found')
+}
+
 export const updateProfile = async (
   id: number,
   data: {

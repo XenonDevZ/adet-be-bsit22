@@ -1,20 +1,34 @@
-import { db } from '../config/db.js'
-import type { BookingRow, BookingStatus, ResultSetHeader } from '../types/index.js'
-import * as notifService from './notification.service.js'
+import { db } from "../config/db.js";
+import type {
+  BookingRow,
+  BookingStatus,
+  ResultSetHeader,
+} from "../types/index.js";
+import * as notifService from "./notification.service.js";
+
+/**
+ * Format a MySQL DATE value (may come back as a JS Date object or YYYY-MM-DD string)
+ * into a human-readable string like "Apr 16, 2026".
+ */
+const fmtDate = (d: Date | string): string => {
+  const date = typeof d === 'string' ? new Date(d + 'T00:00:00') : new Date(d)
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
 
 // ── Create (student) ──────────────────────────────────────
 export const create = async (data: {
-  student_id:        number
-  teacher_id:        number
-  availability_id:   number
-  scheduled_date:    string
-  start_time:        string
-  end_time:          string
-  consultation_type: 'ONLINE' | 'FACE_TO_FACE'
-  student_notes?:    string
+  student_id: number;
+  teacher_id: number;
+  availability_id: number;
+  scheduled_date: string;
+  start_time: string;
+  end_time: string;
+  consultation_type: "ONLINE" | "FACE_TO_FACE";
+  student_notes?: string;
 }): Promise<BookingRow> => {
   // Layer 1: teacher conflict check
-  const [teacherConflict] = await db.query<BookingRow[]>(`
+  const [teacherConflict] = await db.query<BookingRow[]>(
+    `
     SELECT id FROM bookings
     WHERE teacher_id = ?
       AND scheduled_date = ?
@@ -22,14 +36,17 @@ export const create = async (data: {
       AND end_time > ?
       AND status IN ('PENDING','APPROVED')
     LIMIT 1
-  `, [data.teacher_id, data.scheduled_date, data.end_time, data.start_time])
+  `,
+    [data.teacher_id, data.scheduled_date, data.end_time, data.start_time],
+  );
 
   if (teacherConflict.length > 0) {
-    throw new Error('This time slot is already booked with this teacher')
+    throw new Error("This time slot is already booked with this teacher");
   }
 
   // Layer 2: student self-conflict check
-  const [studentConflict] = await db.query<BookingRow[]>(`
+  const [studentConflict] = await db.query<BookingRow[]>(
+    `
     SELECT id FROM bookings
     WHERE student_id = ?
       AND scheduled_date = ?
@@ -37,71 +54,101 @@ export const create = async (data: {
       AND end_time > ?
       AND status IN ('PENDING','APPROVED')
     LIMIT 1
-  `, [data.student_id, data.scheduled_date, data.end_time, data.start_time])
+  `,
+    [data.student_id, data.scheduled_date, data.end_time, data.start_time],
+  );
 
   if (studentConflict.length > 0) {
-    throw new Error('You already have a booking at this time')
+    throw new Error("You already have a booking at this time");
   }
-  const [result] = await db.query<ResultSetHeader>(`
+  const [result] = await db.query<ResultSetHeader>(
+    `
     INSERT INTO bookings
       (student_id, teacher_id, availability_id, scheduled_date,
        start_time, end_time, consultation_type, student_notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    data.student_id, data.teacher_id, data.availability_id,
-    data.scheduled_date, data.start_time, data.end_time,
-    data.consultation_type, data.student_notes ?? null,
-  ])  
+  `,
+    [
+      data.student_id,
+      data.teacher_id,
+      data.availability_id,
+      data.scheduled_date,
+      data.start_time,
+      data.end_time,
+      data.consultation_type,
+      data.student_notes ?? null,
+    ],
+  );
 
-  const booking = await findById(result.insertId)
-  if (!booking) throw new Error('Failed to create booking')
+  const booking = await findById(result.insertId);
+  if (!booking) throw new Error("Failed to create booking");
 
   // Notify teacher
   await notifService.create(
     booking.teacher_user_id,
     booking.id,
-    `New consultation request from ${booking.student_name} on ${data.scheduled_date}`
-  )
+    `New consultation request from ${booking.student_name} on ${fmtDate(data.scheduled_date)}`,
+  );
 
-  return booking
-}
+  // Notify admins
+  await notifService.notifyAdmins(
+    booking.id,
+    `New consultation requested by ${booking.student_name} with ${booking.teacher_name}`
+  );
+
+  return booking;
+};
 
 // ── Queries ───────────────────────────────────────────────
-export const findByStudent = async (studentId: number): Promise<BookingRow[]> => {
-  const [rows] = await db.query<BookingRow[]>(`
+export const findByStudent = async (
+  studentId: number,
+): Promise<BookingRow[]> => {
+  const [rows] = await db.query<BookingRow[]>(
+    `
     SELECT
       b.*,
       u.name   AS student_name,
       u.email  AS student_email,
+      u.picture AS student_picture,
       tu.id    AS teacher_user_id,
-      tu.name  AS teacher_name
+      tu.name  AS teacher_name,
+      tu.picture AS teacher_picture
     FROM bookings b
     JOIN users u   ON u.id  = b.student_id
     JOIN teachers t ON t.id = b.teacher_id
     JOIN users tu  ON tu.id = t.user_id
     WHERE b.student_id = ?
     ORDER BY b.scheduled_date DESC, b.start_time DESC
-  `, [studentId])
-  return rows
-}
+  `,
+    [studentId],
+  );
+  return rows;
+};
 
-export const findByTeacher = async (teacherId: number): Promise<BookingRow[]> => {
-  const [rows] = await db.query<BookingRow[]>(`
+export const findByTeacher = async (
+  teacherId: number,
+): Promise<BookingRow[]> => {
+  const [rows] = await db.query<BookingRow[]>(
+    `
     SELECT
       b.*,
       u.id     AS student_user_id,
       u.name   AS student_name,
       u.email  AS student_email,
-      tu.name  AS teacher_name
+      u.picture AS student_picture,
+      tu.name  AS teacher_name,
+      tu.picture AS teacher_picture
     FROM bookings b
     JOIN users u   ON u.id  = b.student_id
     JOIN teachers t ON t.id = b.teacher_id
     JOIN users tu  ON tu.id = t.user_id
     WHERE b.teacher_id = ?
     ORDER BY b.scheduled_date DESC, b.start_time DESC
-  `, [teacherId])
-  return rows
-}
+  `,
+    [teacherId],
+  );
+  return rows;
+};
 
 export const findAll = async (): Promise<BookingRow[]> => {
   const [rows] = await db.query<BookingRow[]>(`
@@ -110,125 +157,168 @@ export const findAll = async (): Promise<BookingRow[]> => {
       u.id     AS student_user_id,
       u.name   AS student_name,
       u.email  AS student_email,
+      u.picture AS student_picture,
       tu.id    AS teacher_user_id,
-      tu.name  AS teacher_name
+      tu.name  AS teacher_name,
+      tu.picture AS teacher_picture
     FROM bookings b
     JOIN users u   ON u.id  = b.student_id
     JOIN teachers t ON t.id = b.teacher_id
     JOIN users tu  ON tu.id = t.user_id
     ORDER BY b.scheduled_date DESC, b.start_time DESC
-  `)
-  return rows
-}
+  `);
+  return rows;
+};
 
 export const findById = async (id: number): Promise<BookingRow | null> => {
-  const [rows] = await db.query<BookingRow[]>(`
+  const [rows] = await db.query<BookingRow[]>(
+    `
     SELECT
       b.*,
       u.id     AS student_user_id,
       u.name   AS student_name,
       u.email  AS student_email,
+      u.picture AS student_picture,
       tu.id    AS teacher_user_id,
-      tu.name  AS teacher_name
+      tu.name  AS teacher_name,
+      tu.picture AS teacher_picture
     FROM bookings b
     JOIN users u   ON u.id  = b.student_id
     JOIN teachers t ON t.id = b.teacher_id
     JOIN users tu  ON tu.id = t.user_id
     WHERE b.id = ?
     LIMIT 1
-  `, [id])
-  return rows[0] ?? null
-}
+  `,
+    [id],
+  );
+  return rows[0] ?? null;
+};
 
 // ── Update status ─────────────────────────────────────────
 export const updateStatus = async (
-  id:        number,
-  status:    BookingStatus,
-  actorId:   number,
-  actorRole: string
+  id: number,
+  status: BookingStatus,
+  actorId: number,
+  actorRole: string,
 ): Promise<BookingRow> => {
-  const booking = await findById(id)
-  if (!booking) throw new Error('Booking not found')
+  const booking = await findById(id);
+  if (!booking) throw new Error("Booking not found");
 
-  const isStudent = actorRole === 'STUDENT' && booking.student_id === actorId
-  const isTeacher = actorRole === 'TEACHER'
-  const isAdmin   = actorRole === 'ADMIN'
+  const isStudent = actorRole === "STUDENT" && booking.student_id === actorId;
+  const isTeacher = actorRole === "TEACHER";
+  const isAdmin = actorRole === "ADMIN";
 
   const allowed: Record<string, BookingStatus[]> = {
-    student: ['CANCELLED'],
-    teacher: ['APPROVED', 'COMPLETED', 'CANCELLED'],
-    admin:   ['APPROVED', 'COMPLETED', 'CANCELLED'],
-  }
+    student: ["CANCELLED"],
+    teacher: ["APPROVED", "COMPLETED", "CANCELLED"],
+    admin: ["APPROVED", "COMPLETED", "CANCELLED"],
+  };
 
-  const actorKey = isAdmin ? 'admin' : isTeacher ? 'teacher' : 'student'
+  const actorKey = isAdmin ? "admin" : isTeacher ? "teacher" : "student";
   if (!allowed[actorKey].includes(status)) {
-    throw new Error(`You cannot set status to ${status}`)
+    throw new Error(`You cannot set status to ${status}`);
   }
 
-  if (isStudent && status === 'CANCELLED' && booking.status !== 'PENDING') {
-    throw new Error('You can only cancel pending bookings')
+  if (isStudent && status === "CANCELLED" && booking.status !== "PENDING") {
+    throw new Error("You can only cancel pending bookings");
   }
 
   await db.query<ResultSetHeader>(
-    'UPDATE bookings SET status = ? WHERE id = ?',
-    [status, id]
-  )
+    "UPDATE bookings SET status = ? WHERE id = ?",
+    [status, id],
+  );
 
-  const notifyUserId = isStudent ? booking.teacher_user_id : booking.student_user_id
-  await notifService.create(
-    notifyUserId,
-    id,
-    `Your booking on ${booking.scheduled_date} has been ${status.toLowerCase()}.`
-  )
 
-  const updated = await findById(id)
-  if (!updated) throw new Error('Failed to fetch updated booking')
-  return updated
-}
+
+  if (isAdmin) {
+    await notifService.create(
+      booking.student_user_id,
+      id,
+      `Your booking with ${booking.teacher_name} on ${fmtDate(booking.scheduled_date)} has been ${status.toLowerCase()} by an admin.`
+    );
+    await notifService.create(
+      booking.teacher_user_id,
+      id,
+      `Your booking with ${booking.student_name} on ${fmtDate(booking.scheduled_date)} has been ${status.toLowerCase()} by an admin.`
+    );
+  } else if (isTeacher) {
+    await notifService.create(
+      booking.student_user_id,
+      id,
+      `Your booking on ${fmtDate(booking.scheduled_date)} has been ${status.toLowerCase()}.`
+    );
+    await notifService.notifyAdmins(
+      id,
+      `${booking.teacher_name} ${status.toLowerCase()} their booking with ${booking.student_name}.`
+    );
+  } else {
+    // isStudent
+    await notifService.create(
+      booking.teacher_user_id,
+      id,
+      `Your upcoming booking on ${fmtDate(booking.scheduled_date)} has been ${status.toLowerCase()} by the student.`
+    );
+    await notifService.notifyAdmins(
+      id,
+      `${booking.student_name} ${status.toLowerCase()} their booking with ${booking.teacher_name}.`
+    );
+  }
+
+  const updated = await findById(id);
+  if (!updated) throw new Error("Failed to fetch updated booking");
+  return updated;
+};
 
 // ── Add teacher notes ─────────────────────────────────────
 export const addTeacherNotes = async (
-  id:        number,
-  notes:     string,
-  teacherId: number
+  id: number,
+  notes: string,
+  teacherId: number,
 ): Promise<BookingRow> => {
-  const booking = await findById(id)
-  if (!booking) throw new Error('Booking not found')
-  if (booking.teacher_id !== teacherId) throw new Error('Not your booking')
-  if (booking.status !== 'COMPLETED') {
-    throw new Error('Can only add notes to completed bookings')
+  const booking = await findById(id);
+  if (!booking) throw new Error("Booking not found");
+  if (booking.teacher_id !== teacherId) throw new Error("Not your booking");
+  if (booking.status !== "COMPLETED") {
+    throw new Error("Can only add notes to completed bookings");
   }
 
   await db.query<ResultSetHeader>(
-    'UPDATE bookings SET teacher_notes = ? WHERE id = ?',
-    [notes, id]
-  )
+    "UPDATE bookings SET teacher_notes = ? WHERE id = ?",
+    [notes, id],
+  );
 
-  const updated = await findById(id)
-  if (!updated) throw new Error('Failed to fetch updated booking')
-  return updated
-}
+  // Notify student
+  await notifService.create(
+    booking.student_user_id,
+    id,
+    `${booking.teacher_name} added consultation notes for your session on ${fmtDate(booking.scheduled_date)}`
+  );
+
+  const updated = await findById(id);
+  if (!updated) throw new Error("Failed to fetch updated booking");
+  return updated;
+};
 
 // Student requests reschedule
 export const requestReschedule = async (
-  id:        number,
+  id: number,
   studentId: number,
   data: {
-    reschedule_date:       string
-    reschedule_start_time: string
-    reschedule_end_time:   string
-  }
+    reschedule_date: string;
+    reschedule_start_time: string;
+    reschedule_end_time: string;
+  },
 ): Promise<BookingRow> => {
-  const booking = await findById(id)
-  if (!booking) throw new Error('Booking not found')
-  if (booking.student_id !== studentId) throw new Error('Not your booking')
-  if (booking.status !== 'PENDING' && booking.status !== 'APPROVED') {
-    throw new Error('Can only reschedule pending or approved bookings')
+  const booking = await findById(id);
+  if (!booking) throw new Error("Booking not found");
+  if (booking.student_id !== studentId) throw new Error("Not your booking");
+  if (booking.status !== "PENDING" && booking.status !== "APPROVED") {
+    throw new Error("Can only reschedule pending or approved bookings");
   }
 
   // Validate new date is not in the past
   if (new Date(data.reschedule_date) < new Date(new Date().toDateString())) {
-    throw new Error('Reschedule date cannot be in the past')
+    throw new Error("Reschedule date cannot be in the past");
   }
 
   await db.query<ResultSetHeader>(
@@ -236,32 +326,43 @@ export const requestReschedule = async (
      SET reschedule_date = ?, reschedule_start_time = ?,
          reschedule_end_time = ?, reschedule_status = 'REQUESTED'
      WHERE id = ?`,
-    [data.reschedule_date, data.reschedule_start_time, data.reschedule_end_time, id]
-  )
+    [
+      data.reschedule_date,
+      data.reschedule_start_time,
+      data.reschedule_end_time,
+      id,
+    ],
+  );
 
   // Notify teacher
   await notifService.create(
     booking.teacher_user_id,
     id,
-    `${booking.student_name} requested a reschedule for their booking on ${booking.scheduled_date}`
-  )
+    `${booking.student_name} requested a reschedule for their booking on ${fmtDate(booking.scheduled_date)}`,
+  );
 
-  const updated = await findById(id)
-  if (!updated) throw new Error('Failed to fetch updated booking')
-  return updated
-}
+  // Notify admins
+  await notifService.notifyAdmins(
+    id,
+    `${booking.student_name} requested a reschedule for their booking with ${booking.teacher_name}`
+  );
+
+  const updated = await findById(id);
+  if (!updated) throw new Error("Failed to fetch updated booking");
+  return updated;
+};
 
 // Teacher responds to reschedule
 export const respondReschedule = async (
-  id:        number,
+  id: number,
   teacherId: number,
-  accept:    boolean
+  accept: boolean,
 ): Promise<BookingRow> => {
-  const booking = await findById(id)
-  if (!booking) throw new Error('Booking not found')
-  if (booking.teacher_id !== teacherId) throw new Error('Not your booking')
-  if (booking.reschedule_status !== 'REQUESTED') {
-    throw new Error('No reschedule request found for this booking')
+  const booking = await findById(id);
+  if (!booking) throw new Error("Booking not found");
+  if (booking.teacher_id !== teacherId) throw new Error("Not your booking");
+  if (booking.reschedule_status !== "REQUESTED") {
+    throw new Error("No reschedule request found for this booking");
   }
 
   if (accept) {
@@ -276,23 +377,29 @@ export const respondReschedule = async (
            reschedule_start_time = NULL,
            reschedule_end_time = NULL
        WHERE id = ?`,
-      [id]
-    )
+      [id],
+    );
   } else {
     await db.query<ResultSetHeader>(
       `UPDATE bookings SET reschedule_status = 'REJECTED' WHERE id = ?`,
-      [id]
-    )
+      [id],
+    );
   }
 
   // Notify student
   const msg = accept
-    ? `Your reschedule request for ${booking.scheduled_date} was accepted.`
-    : `Your reschedule request for ${booking.scheduled_date} was rejected.`
+    ? `Your reschedule request for ${fmtDate(booking.scheduled_date)} was accepted.`
+    : `Your reschedule request for ${fmtDate(booking.scheduled_date)} was rejected.`;
 
-  await notifService.create(booking.student_user_id, id, msg)
+  await notifService.create(booking.student_user_id, id, msg);
 
-  const updated = await findById(id)
-  if (!updated) throw new Error('Failed to fetch updated booking')
-  return updated
-}
+  // Notify admins
+  const adminMsg = accept
+    ? `${booking.teacher_name} accepted the reschedule request from ${booking.student_name}.`
+    : `${booking.teacher_name} rejected the reschedule request from ${booking.student_name}.`;
+  await notifService.notifyAdmins(id, adminMsg);
+
+  const updated = await findById(id);
+  if (!updated) throw new Error("Failed to fetch updated booking");
+  return updated;
+};

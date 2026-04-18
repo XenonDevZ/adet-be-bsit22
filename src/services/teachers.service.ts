@@ -66,10 +66,18 @@ export const createProfile = async (
   return rows[0]
 }
 
-export const updateSubjects = async (userId: number, subjects: string): Promise<void> => {
+
+
+export const updateProfile = async (
+  userId: number,
+  data: {
+    department: string
+    bio?: string | null
+  }
+): Promise<void> => {
   const [result] = await db.query<ResultSetHeader>(
-    'UPDATE teachers SET subjects = ? WHERE user_id = ?',
-    [subjects, userId]
+    'UPDATE teachers SET department = ?, bio = ? WHERE user_id = ?',
+    [data.department, data.bio ?? null, userId]
   )
   if (result.affectedRows === 0) throw new Error('Teacher not found')
 }
