@@ -10,7 +10,7 @@ const envSchema = z.object({
   DB_PASSWORD: z.string(),
   GOOGLE_CLIENT_ID: z.string(),
   JWT_SECRET: z.string().min(32),
-  FRONTEND_URL: z.string().default("http://localhost:4200"),
+  FRONTEND_URL: z.string().default("https://ldcu-consultations.vercel.app"),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().optional(),
   GOOGLE_CALENDAR_REFRESH_TOKEN: z.string().optional(),

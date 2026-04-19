@@ -13,7 +13,7 @@ export const listUsers = async (c: Context) => {
 
 // PATCH /users/:id/role  (admin only)
 export const changeRole = async (c: Context) => {
-  const id   = Number(c.req.param('id'))
+  const id = Number(c.req.param('id'))
   if (isNaN(id)) return c.json(err('Invalid user id'), 400)
 
   const body = await c.req.json()
@@ -75,7 +75,7 @@ export const setDepartment = async (c: Context) => {
       await teachersService.updateProfile(id, { department, bio: teacher.bio })
       teacher = await teachersService.findByUserId(id)
     }
-    
+
     return c.json(ok(teacher))
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Failed to update department'
