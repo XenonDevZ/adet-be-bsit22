@@ -7,23 +7,28 @@ export const startChatCloseJob = (): void => {
   // Check every minute for consultations that just ended
   cron.schedule("* * * * *", async () => {
     try {
-      // Find APPROVED ONLINE bookings whose end_time just passed
+      // Get exact current time in Asia/Manila, circumventing Vercel/Render UTC clock
+      const nowInManila = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const manilaTimestamp = `${nowInManila.getFullYear()}-${pad(nowInManila.getMonth()+1)}-${pad(nowInManila.getDate())} ${pad(nowInManila.getHours())}:${pad(nowInManila.getMinutes())}:${pad(nowInManila.getSeconds())}`;
+
+      // Find ALL APPROVED bookings whose end_time just passed in Manila time
       const [bookings] = await db.query<BookingRow[]>(`
-        SELECT id FROM bookings
+        SELECT id, consultation_type FROM bookings
         WHERE status = 'APPROVED'
-          AND consultation_type = 'ONLINE'
-          AND chat_closed = FALSE
-          AND TIMESTAMP(scheduled_date, end_time) <= NOW()
-      `);
+          AND TIMESTAMP(scheduled_date, end_time) <= ?
+      `, [manilaTimestamp]);
 
       for (const booking of bookings) {
-        await closeRoom(booking.id);
+        if (booking.consultation_type === 'ONLINE') {
+          await closeRoom(booking.id);
+        }
         // Mark as completed
         await db.query(
-          'UPDATE bookings SET status = "COMPLETED" WHERE id = ?',
+          'UPDATE bookings SET status = "COMPLETED", chat_closed = TRUE WHERE id = ?',
           [booking.id],
         );
-        console.log(`[ChatCloseJob] Closed chat for booking #${booking.id}`);
+        console.log(`[AutoCloseJob] Completed booking #${booking.id}`);
       }
     } catch (e) {
       console.error("[ChatCloseJob] Error:", e);
