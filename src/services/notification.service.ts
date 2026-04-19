@@ -22,7 +22,7 @@ export const notifyAdmins = async (
   message: string
 ): Promise<void> => {
   const [admins] = await db.query<any[]>(
-    'SELECT id FROM users WHERE role = "ADMIN"'
+    "SELECT id FROM users WHERE role = 'ADMIN'"
   )
   for (const admin of admins) {
     await create(admin.id, bookingId, message)

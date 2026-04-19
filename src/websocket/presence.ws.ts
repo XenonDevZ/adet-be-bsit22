@@ -59,6 +59,12 @@ export const setupPresenceWebSocket = () => {
         })
       );
 
+      // Ping setup
+      (ws as any).isAlive = true;
+      ws.on('pong', () => {
+        (ws as any).isAlive = true;
+      });
+
       // Heartbeat & keepalive (optional but good practice)
       ws.on("message", (msg) => {
         try {
@@ -88,6 +94,17 @@ export const setupPresenceWebSocket = () => {
       ws.close(1011, "Internal Server Error");
     }
   });
+
+  // Fast heartbeat to aggressively clean up dead connections (like closed browser tabs)
+  setInterval(() => {
+    wss.clients.forEach((ws: any) => {
+      if (ws.isAlive === false) {
+        return ws.terminate();
+      }
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 15000);
 
   console.log("✅  WebSocket presence server ready at /ws/presence");
   return wss;
