@@ -64,14 +64,22 @@ export const setDepartment = async (c: Context) => {
   if (!department) return c.json(err('Department is required'), 400)
 
   try {
-    const teacher = await teachersService.findByUserId(id)
-    if (!teacher) return c.json(err('Teacher profile not found for this user'), 404)
-
-    await teachersService.updateProfile(id, { department, bio: teacher.bio })
-    const updated = await teachersService.findByUserId(id)
-    return c.json(ok(updated))
+    let teacher = await teachersService.findByUserId(id)
+    if (!teacher) {
+      const user = await usersService.findById(id)
+      if (user?.role !== 'TEACHER') {
+        return c.json(err('User is not a teacher'), 400)
+      }
+      teacher = await teachersService.createProfile(id, department)
+    } else {
+      await teachersService.updateProfile(id, { department, bio: teacher.bio })
+      teacher = await teachersService.findByUserId(id)
+    }
+    
+    return c.json(ok(teacher))
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Failed to update department'
     return c.json(err(message), 400)
   }
 }
+
