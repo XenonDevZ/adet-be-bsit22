@@ -22,6 +22,18 @@ const broadcastToAll = (data: object) => {
   }
 };
 
+export const sendToUser = (userId: number, data: object) => {
+  const connections = onlineUsers.get(userId);
+  if (connections) {
+    const payload = JSON.stringify(data);
+    for (const ws of connections) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(payload);
+      }
+    }
+  }
+};
+
 export const setupPresenceWebSocket = () => {
   const wss = new WebSocketServer({ noServer: true });
 

@@ -1,5 +1,6 @@
 import { db } from '../config/db.js'
 import type { NotificationRow, ResultSetHeader } from '../types/index.js'
+import { sendToUser } from '../websocket/presence.ws.js'
 
 const fmtDate = (d: Date | string): string => {
   const date = typeof d === 'string' ? new Date(d + 'T00:00:00') : new Date(d)
@@ -15,6 +16,9 @@ export const create = async (
     'INSERT INTO notifications (user_id, booking_id, message) VALUES (?, ?, ?)',
     [userId, bookingId, message]
   )
+  
+  // Real-time Push Notification!
+  sendToUser(userId, { type: 'notification_refresh' })
 }
 
 export const notifyAdmins = async (

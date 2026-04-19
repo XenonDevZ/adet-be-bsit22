@@ -100,8 +100,10 @@ export const setupChatWebSocket = () => {
     }
 
     // Check it is time (within 5 min buffer before start)
-    const now = new Date();
-    // FIX THE DATE INJECTION TO AVOID Invalid Date AND Timezone Shift!!!
+    // Server is in UTC, we must compare the DB's local time against Philippine Time
+    const phTimeStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila", hour12: false });
+    const nowLocal = new Date(phTimeStr);
+
     let formattedDate = booking.scheduled_date as any;
     if (formattedDate instanceof Date) {
       const year = formattedDate.getFullYear();
@@ -109,11 +111,11 @@ export const setupChatWebSocket = () => {
       const day = String(formattedDate.getDate()).padStart(2, '0');
       formattedDate = `${year}-${month}-${day}`;
     }
-    const chatTime = new Date(`${formattedDate}T${booking.start_time}`);
-    chatTime.setMinutes(chatTime.getMinutes() - 5);
+    const chatTimeLocal = new Date(`${formattedDate}T${booking.start_time}`);
+    chatTimeLocal.setMinutes(chatTimeLocal.getMinutes() - 5);
     
-    if (now < chatTime) {
-      console.log("[WS] Rejected: Too early. chatTime:", chatTime, "now:", now);
+    if (nowLocal < chatTimeLocal) {
+      console.log("[WS] Rejected: Too early. chatTimeLocal:", chatTimeLocal, "nowLocal:", nowLocal);
       ws.close(1008, "Chat not yet available");
       return;
     }
