@@ -143,6 +143,12 @@ export const setupChatWebSocket = () => {
       message: `${payload.name} joined the chat`,
     });
 
+    // Ping setup
+    (ws as any).isAlive = true;
+    ws.on('pong', () => {
+      (ws as any).isAlive = true;
+    });
+
     // Handle incoming messages
     ws.on("message", async (raw) => {
       try {
@@ -198,6 +204,17 @@ export const setupChatWebSocket = () => {
       }
     });
   });
+
+  // Fast heartbeat to aggressively clean up dead connections and keep proxies alive
+  setInterval(() => {
+    wss.clients.forEach((ws: any) => {
+      if (ws.isAlive === false) {
+        return ws.terminate();
+      }
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 15000);
 
   console.log("✅  WebSocket chat server ready at /ws/chat");
   return wss;

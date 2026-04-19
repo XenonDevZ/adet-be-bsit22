@@ -90,6 +90,12 @@ export const setupVideoWebSocket = () => {
     // Let the client know they're connected
     ws.send(JSON.stringify({ type: "connected", userId: payload.sub }));
 
+    // Ping setup
+    (ws as any).isAlive = true;
+    ws.on('pong', () => {
+      (ws as any).isAlive = true;
+    });
+
     // Handle signaling messages
     ws.on("message", (raw) => {
       try {
@@ -160,6 +166,17 @@ export const setupVideoWebSocket = () => {
       console.log(`[Video WS] User ${payload.name} left video room for booking ${bookingId}`);
     });
   });
+
+  // Fast heartbeat to aggressively clean up dead connections and keep proxies alive
+  setInterval(() => {
+    wss.clients.forEach((ws: any) => {
+      if (ws.isAlive === false) {
+        return ws.terminate();
+      }
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 15000);
 
   console.log("✅  WebSocket video signaling server ready at /ws/video");
   return wss;
