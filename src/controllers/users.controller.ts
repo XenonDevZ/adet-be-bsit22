@@ -53,3 +53,25 @@ export const changeRole = async (c: Context) => {
     return c.json(err(message), 400)
   }
 }
+
+// PATCH /users/:id/department  (admin only)
+export const setDepartment = async (c: Context) => {
+  const id = Number(c.req.param('id'))
+  if (isNaN(id)) return c.json(err('Invalid user id'), 400)
+
+  const body = await c.req.json()
+  const department: string = (body.department ?? '').trim()
+  if (!department) return c.json(err('Department is required'), 400)
+
+  try {
+    const teacher = await teachersService.findByUserId(id)
+    if (!teacher) return c.json(err('Teacher profile not found for this user'), 404)
+
+    await teachersService.updateProfile(id, { department, bio: teacher.bio })
+    const updated = await teachersService.findByUserId(id)
+    return c.json(ok(updated))
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to update department'
+    return c.json(err(message), 400)
+  }
+}
