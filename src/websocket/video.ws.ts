@@ -192,22 +192,28 @@ export const setupVideoWebSocket = () => {
     // Handle disconnect
     ws.on("close", () => {
       videoRooms.get(bookingId)?.delete(client);
-      
+
+      // Read call state BEFORE cleaning up maps
+      const call = activeCalls.get(bookingId);
+
       const room = videoRooms.get(bookingId);
       if (!room || room.size === 0) {
         videoRooms.delete(bookingId);
         activeCalls.delete(bookingId);
       }
 
-      // Only broadcast call:ended if the CALLER disconnected during an active call
-      // This prevents spurious "call ended" when the receiver just reconnects their signaling socket
-      const call = activeCalls.get(bookingId);
-      const wasCallerInActiveCall = call === null && client.peerId;
-      if (wasCallerInActiveCall) {
+      // If the caller disconnects while a call was active (call was accepted, so activeCalls = null)
+      // OR if the caller disconnects while still ringing (activeCalls has data and this is the caller)
+      const callerDisconnectedMidCall = call === null && client.peerId;
+      const callerDisconnectedWhileRinging = call !== null && call?.callerId === payload.sub;
+
+      if (callerDisconnectedMidCall || callerDisconnectedWhileRinging) {
+        // Clear the active call state since caller is gone
+        activeCalls.set(bookingId, null);
         broadcastTo(bookingId, {
           type: "call:ended",
           endedBy: payload.name,
-        }, payload.sub);
+        });
       }
 
       console.log(`[Video WS] User ${payload.name} left video room for booking ${bookingId}`);
