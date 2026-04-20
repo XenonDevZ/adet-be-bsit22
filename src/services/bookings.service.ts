@@ -99,10 +99,32 @@ export const create = async (data: {
   return booking;
 };
 
+// ── Lazy Auto-Complete ──────────────────────────────────────
+const autoCompletePastBookings = async (): Promise<void> => {
+  try {
+    const nowInManila = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const pad = (n: number) => String(n).padStart(2, '0');
+    // Generates a strict "YYYY-MM-DD HH:MM:SS" local time string
+    const manilaTime = `${nowInManila.getFullYear()}-${pad(nowInManila.getMonth()+1)}-${pad(nowInManila.getDate())} ${pad(nowInManila.getHours())}:${pad(nowInManila.getMinutes())}:${pad(nowInManila.getSeconds())}`;
+
+    // Safely compares dates by concatenating standard strings to avoid MySQL timezone offsets
+    await db.query(`
+      UPDATE bookings 
+      SET status = 'COMPLETED', chat_closed = TRUE 
+      WHERE status = 'APPROVED' 
+        AND CONCAT(scheduled_date, ' ', end_time) <= ?
+    `, [manilaTime]);
+  } catch (e) {
+    console.error("[AutoClose] Failed to auto-complete bookings:", e);
+  }
+};
+
 // ── Queries ───────────────────────────────────────────────
 export const findByStudent = async (
   studentId: number,
 ): Promise<BookingRow[]> => {
+  await autoCompletePastBookings();
+  
   const [rows] = await db.query<BookingRow[]>(
     `
     SELECT
@@ -128,6 +150,8 @@ export const findByStudent = async (
 export const findByTeacher = async (
   teacherId: number,
 ): Promise<BookingRow[]> => {
+  await autoCompletePastBookings();
+
   const [rows] = await db.query<BookingRow[]>(
     `
     SELECT
@@ -151,6 +175,8 @@ export const findByTeacher = async (
 };
 
 export const findAll = async (): Promise<BookingRow[]> => {
+  await autoCompletePastBookings();
+  
   const [rows] = await db.query<BookingRow[]>(`
     SELECT
       b.*,
