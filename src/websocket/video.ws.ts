@@ -132,11 +132,12 @@ export const setupVideoWebSocket = () => {
           case "call:initiate": {
             // Caller sends their peerId, store the active call and broadcast
             client.peerId = data.peerId;
-            const callData: ActiveCall = {
+            const callData: ActiveCall | null = {
               callerName: payload.name,
               callerPicture: payload.picture,
               callerPeerId: data.peerId,
               callerId: payload.sub,
+              accepted: false,
             };
             activeCalls.set(bookingId, callData);
 
@@ -211,7 +212,7 @@ export const setupVideoWebSocket = () => {
       // (not yet accepted). If the call is connected, the PeerJS layer handles
       // the disconnect and we don't want a spurious call:ended broadcast.
       const callerDisconnectedWhileRinging =
-        call !== null && !call.accepted && call.callerId === payload.sub;
+        call && !call.accepted && call.callerId === payload.sub;
 
       if (callerDisconnectedWhileRinging) {
         activeCalls.set(bookingId, null);
