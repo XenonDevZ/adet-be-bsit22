@@ -14,8 +14,18 @@ interface VideoClient {
   peerId?: string;
 }
 
+// Tracks an in-progress call within a room so late joiners get the signal
+interface ActiveCall {
+  callerName: string;
+  callerPicture: string;
+  callerPeerId: string;
+  callerId: number;
+}
+
 // Map of bookingId → set of connected video clients
 const videoRooms = new Map<number, Set<VideoClient>>();
+// Map of bookingId → active call data (null if no call in progress)
+const activeCalls = new Map<number, ActiveCall | null>();
 
 const broadcastTo = (bookingId: number, data: object, excludeUserId?: number) => {
   const room = videoRooms.get(bookingId);
@@ -90,6 +100,21 @@ export const setupVideoWebSocket = () => {
     // Let the client know they're connected
     ws.send(JSON.stringify({ type: "connected", userId: payload.sub }));
 
+    // ── LATE JOINER FIX ──────────────────────────────────────────
+    // If there's already an active call in this room, immediately send
+    // the call:incoming signal to this new connection so they don't miss it
+    const existingCall = activeCalls.get(bookingId);
+    if (existingCall && existingCall.callerId !== payload.sub) {
+      console.log(`[Video WS] Replaying call:incoming to late-joiner ${payload.name}`);
+      ws.send(JSON.stringify({
+        type: "call:incoming",
+        callerName: existingCall.callerName,
+        callerPicture: existingCall.callerPicture,
+        callerPeerId: existingCall.callerPeerId,
+        callerId: existingCall.callerId,
+      }));
+    }
+
     // Ping setup
     (ws as any).isAlive = true;
     ws.on('pong', () => {
@@ -103,8 +128,16 @@ export const setupVideoWebSocket = () => {
 
         switch (data.type) {
           case "call:initiate": {
-            // Caller sends their peerId, broadcast to the other party
+            // Caller sends their peerId, store the active call and broadcast
             client.peerId = data.peerId;
+            const callData: ActiveCall = {
+              callerName: payload.name,
+              callerPicture: payload.picture,
+              callerPeerId: data.peerId,
+              callerId: payload.sub,
+            };
+            activeCalls.set(bookingId, callData);
+
             broadcastTo(bookingId, {
               type: "call:incoming",
               callerName: payload.name,
@@ -116,8 +149,9 @@ export const setupVideoWebSocket = () => {
           }
 
           case "call:accept": {
-            // Callee accepted, send their peerId back to caller
+            // Callee accepted — clear the pending call state
             client.peerId = data.peerId;
+            activeCalls.set(bookingId, null);
             broadcastTo(bookingId, {
               type: "call:accepted",
               accepterName: payload.name,
@@ -128,6 +162,8 @@ export const setupVideoWebSocket = () => {
           }
 
           case "call:reject": {
+            // Rejected — clear the pending call 
+            activeCalls.set(bookingId, null);
             broadcastTo(bookingId, {
               type: "call:rejected",
               rejectorName: payload.name,
@@ -136,6 +172,8 @@ export const setupVideoWebSocket = () => {
           }
 
           case "call:end": {
+            // Call ended — clear state
+            activeCalls.set(bookingId, null);
             broadcastTo(bookingId, {
               type: "call:ended",
               endedBy: payload.name,
@@ -153,16 +191,25 @@ export const setupVideoWebSocket = () => {
 
     // Handle disconnect
     ws.on("close", () => {
-      // Notify other party that this user's video connection dropped
-      broadcastTo(bookingId, {
-        type: "call:ended",
-        endedBy: payload.name,
-      }, payload.sub);
-
       videoRooms.get(bookingId)?.delete(client);
-      if (videoRooms.get(bookingId)?.size === 0) {
+      
+      const room = videoRooms.get(bookingId);
+      if (!room || room.size === 0) {
         videoRooms.delete(bookingId);
+        activeCalls.delete(bookingId);
       }
+
+      // Only broadcast call:ended if the CALLER disconnected during an active call
+      // This prevents spurious "call ended" when the receiver just reconnects their signaling socket
+      const call = activeCalls.get(bookingId);
+      const wasCallerInActiveCall = call === null && client.peerId;
+      if (wasCallerInActiveCall) {
+        broadcastTo(bookingId, {
+          type: "call:ended",
+          endedBy: payload.name,
+        }, payload.sub);
+      }
+
       console.log(`[Video WS] User ${payload.name} left video room for booking ${bookingId}`);
     });
   });
@@ -181,3 +228,4 @@ export const setupVideoWebSocket = () => {
   console.log("✅  WebSocket video signaling server ready at /ws/video");
   return wss;
 };
+
