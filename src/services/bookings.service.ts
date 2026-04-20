@@ -31,7 +31,7 @@ export const create = async (data: {
     `
     SELECT id FROM bookings
     WHERE teacher_id = ?
-      AND scheduled_date = ?
+      AND DATE(scheduled_date) = DATE(?)
       AND start_time < ?
       AND end_time > ?
       AND status IN ('PENDING','APPROVED')
@@ -49,7 +49,7 @@ export const create = async (data: {
     `
     SELECT id FROM bookings
     WHERE student_id = ?
-      AND scheduled_date = ?
+      AND DATE(scheduled_date) = DATE(?)
       AND start_time < ?
       AND end_time > ?
       AND status IN ('PENDING','APPROVED')
