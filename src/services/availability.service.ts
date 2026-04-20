@@ -7,6 +7,30 @@ export const create = async (data: {
   start_time:  string
   end_time:    string
 }): Promise<AvailabilityRow> => {
+
+  // ── Overlap guard ──────────────────────────────────────────────────────────
+  // Reject if any existing active slot on the same day overlaps this time range.
+  // Two intervals [A_start, A_end) and [B_start, B_end) overlap when:
+  //   A_start < B_end  AND  A_end > B_start
+  const [conflicts] = await db.query<AvailabilityRow[]>(
+    `SELECT id FROM availability
+     WHERE teacher_id  = ?
+       AND day_of_week = ?
+       AND is_active   = TRUE
+       AND start_time  < ?
+       AND end_time    > ?
+     LIMIT 1`,
+    [data.teacher_id, data.day_of_week, data.end_time, data.start_time]
+  )
+
+  if (conflicts.length > 0) {
+    throw new Error(
+      `This time slot overlaps with an existing availability slot on ${data.day_of_week}. ` +
+      `Please choose a different time or remove the conflicting slot first.`
+    )
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   const [result] = await db.query<ResultSetHeader>(
     `INSERT INTO availability (teacher_id, day_of_week, start_time, end_time)
      VALUES (?, ?, ?, ?)`,
